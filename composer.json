@@ -1,0 +1,16 @@
+{
+    "name": "kubeecms/kcms-sheets",
+    "description": "Sync with your Orders, Products, Customers, Coupons, and Events to a single Google Spreadsheet.",
+    "keywords": ["kubee", "kubeecms", "kcms-sheets"],
+    "homepage": "https://github.com/KubeeCMS/kcms-forms",
+    "authors": [
+      {
+        "name": "Kubee CMS",
+        "homepage": "https://github.com/KubeeCMS/"
+      }
+    ],
+    "type": "wordpress-plugin",
+    "require": {
+      "php": ">=7.4"
+    }
+  }
