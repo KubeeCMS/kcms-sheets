@@ -114,7 +114,7 @@ i.prdnotice , i.ordnotice{
 	background:#fff;
 	padding: 30px;
 	overflow: hidden;
-	min-height: 676px;
+	min-height: 890px;
 }
 .vertical-tabs .tab + .tabcontent {
 	display: block;
@@ -487,7 +487,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#ff5858', end
 	background-position:0px -136px;
 }
 .vertical-tabs .em-settings .tab-icon {
-	background-position:0px -175px;
+	background-position:0px -1002px;
 	width: 23px;
 	height: 26px;
 }
@@ -524,7 +524,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#ff5858', end
 	height: 31px;
 }
 .vertical-tabs .em-settings.active .tab-icon {
-	background-position:0px -220px;
+	background-position:0px -1029px;
 }
 .vertical-tabs .support .tab-icon {
 	background-position:0px -265px;
@@ -1045,4 +1045,36 @@ display:none;
 }
 #general-settings #automatic-scheduling #scheduling_date, #general-settings #automatic-scheduling select#schedule_recurrence{
 	margin-top: 15px;
+}
+.vertical-tabs #em-settings .data-collection{
+	width: 68%;
+}
+.vertical-tabs #em-settings .wpssw-register-link{
+	display: block;
+	margin-top: 10px;
+}
+.vertical-tabs #em-settings .wpssw-license-status{
+	text-transform: capitalize;
+	vertical-align: sub;
+	color:green;
+}
+.vertical-tabs #em-settings .form-table th{
+	width: 175px;
+}
+.vertical-tabs #em-settings .form-table{
+	margin-bottom: 15px;
+}
+.vertical-tabs #em-settings p.box {
+	background: #F0F0F1;
+	padding: 15px 20px;
+	line-height: 1.5;
+	font-size: 15px;
+	width: 71%;
+}
+.vertical-tabs #em-settings li, .vertical-tabs #em-settings p {
+	font-size: 14px;
+	line-height: 23px;
+}
+.vertical-tabs #em-settings p.f16{
+	font-size: 16px;
 }

@@ -6,539 +6,668 @@
  * @package wpsyncsheets-for-woocommerce
  */
 
+// Exit if accessed directly.
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 // Direct access security.
 if ( ! defined( 'WPSSW_PLUGIN_SECURITY' ) ) {
 	die();
 }
-/**
- * Class WPSSW_Plugin_Update.
- */
-final class WPSSW_Plugin_Update {
-	/**
-	 * Instance of this WPSSW_Plugin_Update class
-	 *
-	 * @var $instance
-	 */
-	protected static $instance = null;
-	/**
-	 * Primary class constructor.
-	 *
-	 * @since 1.0.0
-	 */
-	public function __construct() {
-		$this->wpssw_setup();
-		// Deferred Download.
-		add_action( 'upgrader_package_options', array( $this, 'wpssw_maybe_deferred_download' ), 9 );
-		// Add pre download filter to help with 3rd party plugin integration.
-		add_filter( 'upgrader_pre_download', array( $this, 'wpssw_upgrader_pre_download' ), 2, 4 );
-	}
-	/**
-	 * Create object of WPSSW_Update_Manager class.
-	 *
-	 * @since 1.0.0
-	 */
-	public function wpssw_setup() {
-		$instance = new WPSSW_Update_Manager( WPSSW_PLUGIN_SLUG, $this );
-	}
-	/**
-	 * Create self Instance.
-	 */
-	public static function instance() {
-		if ( is_null( self::$instance ) ) {
-			self::$instance = new self();
-		}
-		return self::$instance;
-	}
-	/**
-	 * Initialization
-	 */
-	public function init() {
-	}
-	/**
-	 * Defers building the API download url until the last responsible moment to limit file requests.
-	 *
-	 * Filter the package options before running an update.
-	 *
-	 * @param array $options {
-	 *     Options used by the upgrader.
-	 *
-	 * @type string $package Package for update.
-	 * @type string $destination Update location.
-	 * @type bool   $clear_destination Clear the destination resource.
-	 * @type bool   $clear_working Clear the working resource.
-	 * @type bool   $abort_if_destination_exists Abort if the Destination directory exists.
-	 * @type bool   $is_multi Whether the upgrader is running multiple times.
-	 * @type array  $hook_extra Extra hook arguments.
-	 * }
-	 * @since 1.0.0
-	 */
-	public function wpssw_maybe_deferred_download( $options ) {
-		$package = $options['package'];
-		if ( false !== strrpos( $package, 'deferred_download' ) && false !== strrpos( $package, 'item_id' ) ) {
-			parse_str( wp_parse_url( $package, PHP_URL_QUERY ), $vars );
-			if ( $vars['item_id'] ) {
-				$args               = $this->wpssw_set_bearer_args( $vars['item_id'] );
-				$options['package'] = $this->wpssw_download( $vars['item_id'], $args );
-			}
-		}
-		return $options;
-	}
-	/**
-	 * We want to stop certain popular 3rd party scripts from blocking the update process by
-	 * adjusting the plugin name slightly so the 3rd party plugin checks stop.
-	 *
-	 * Currently works for: Visual Composer.
-	 *
-	 * @param string $reply Package URL.
-	 * @param string $package Package URL.
-	 * @param object $updater Updater Object.
-	 *
-	 * @return string $reply    New Package URL.
-	 * @since 2.0.0
-	 */
-	public function wpssw_upgrader_pre_download( $reply, $package, $updater ) {
-		if ( false !== strpos( $package, 'marketplace.envato.com/short-dl' ) ) {
-			if ( isset( $updater->skin->plugin_info ) && ! empty( $updater->skin->plugin_info['Name'] ) ) {
-				$updater->skin->plugin_info['Name'] = $updater->skin->plugin_info['Name'] . '.';
-			} else {
-				$updater->skin->plugin_info = array(
-					'Name' => 'Name',
-				);
-			}
-		}
-		return $reply;
-	}
-	/**
-	 * Get the item download.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param  int   $id The item ID.
-	 * @param  array $args The arguments passed to `wp_remote_get`.
-	 * @return bool|array The HTTP response.
-	 */
-	public function wpssw_download( $id, $args = array() ) {
-		if ( empty( $id ) ) {
-			return false;
-		}
-		$url      = 'https://api.envato.com/v2/market/buyer/download?item_id=' . $id . '&shorten_url=true';
-		$response = WPSSW_Update_Manager::wpssw_request( $url, $args );
-		// @todo Find out which errors could be returned & handle them in the UI.
-		if ( is_wp_error( $response ) || empty( $response ) || ! empty( $response['error'] ) ) {
-			return false;
-		}
-		if ( ! empty( $response['wordpress_plugin'] ) ) {
-			return $response['wordpress_plugin'];
-		}
-		return false;
-	}
-	/**
-	 * Returns the bearer arguments for a request with a single use API Token.
-	 *
-	 * @param int $id The item ID.
-	 *
-	 * @return array
-	 * @since 1.0.0
-	 */
-	public function wpssw_set_bearer_args( $id ) {
-		$token = get_option( 'wpssw_envato_apikey' );
 
-		if ( ! empty( $token ) ) {
-			$args = array(
-				'headers' => array(
-					'Authorization' => 'Bearer ' . $token,
-				),
-			);
-		}
-		return $args;
-	}
-}
 /**
- * Class WPSSW_Update_Manager.
+ * Allows plugins to use their own update API.
+ *
+ * @author Creative Werk Designs
+ * @version 1.9.0
  */
-// phpcs:ignore
-final class WPSSW_Update_Manager {
+class WPSSW_Plugin_Update {
 	/**
-	 * Plugin slug
+	 * API Url
 	 *
-	 * @var $plugin_slug
+	 * @var $api_url
 	 */
-	public $plugin_slug;
+	private $api_url = '';
 	/**
-	 * Slug
+	 * API Data
+	 *
+	 * @var $api_data
+	 */
+	private $api_data = array();
+	/**
+	 * Plugin File
+	 *
+	 * @var $plugin_file
+	 */
+	private $plugin_file = '';
+	/**
+	 * Plugin Name
+	 *
+	 * @var $name
+	 */
+	private $name = '';
+	/**
+	 * Plugin Slug
 	 *
 	 * @var $slug
 	 */
-	public $slug;
+	private $slug = '';
 	/**
-	 * WordPress plugins.
+	 * Version
 	 *
-	 * @since 1.0.0
-	 * @access private
-	 *
-	 * @var array
+	 * @var $version
 	 */
-	private static $wp_plugins = array();
+	private $version = '';
 	/**
-	 * Premium plugins.
+	 * Override
 	 *
-	 * @since 1.0.0
-	 * @access private
-	 *
-	 * @var array
+	 * @var $wp_override
 	 */
-	private static $plugins = array();
+	private $wp_override = false;
 	/**
-	 * Class Constructer.
+	 * Beta Testing
 	 *
-	 * @param string $plugin_slug Plugin Slug.
-	 * @param object $instance Instance of class.
+	 * @var $beta
 	 */
-	public function __construct( $plugin_slug, $instance ) {
-		$this->plugin_envato_id = WPSSW_PLUGIN_ID;
-		$this->plugin_slug      = $plugin_slug;
-		$this->slug             = explode( '/', $plugin_slug );
-		$this->slug             = str_replace( '.php', '', $this->slug[1] );
+	private $beta = false;
+	/**
+	 * Health check
+	 *
+	 * @var $health_check_timeout
+	 */
+	private $health_check_timeout = 5;
 
-		// Inject plugin updates into the response array.
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'wpssw_update_plugins' ), 5, 1 );
-		add_filter( 'pre_set_transient_update_plugins', array( $this, 'wpssw_update_plugins' ), 5, 1 );
-		// Inject plugin information into the API calls.
-		add_filter( 'plugins_api', array( $this, 'wpssw_plugins_api' ), 10, 3 );
+	/**
+	 * Class constructor.
+	 *
+	 * @uses plugin_basename()
+	 * @uses hook()
+	 *
+	 * @param string $_api_url     The URL pointing to the custom API endpoint.
+	 * @param string $_plugin_file Path to the plugin file.
+	 * @param array  $_api_data    Optional data to send with API calls.
+	 */
+	public function __construct( $_api_url, $_plugin_file, $_api_data = null ) {
+
+		global $edd_plugin_data;
+
+		$this->api_url     = trailingslashit( $_api_url );
+		$this->api_data    = $_api_data;
+		$this->plugin_file = $_plugin_file;
+		$this->name        = plugin_basename( $_plugin_file );
+		$this->slug        = basename( $_plugin_file, '.php' );
+		$this->version     = $_api_data['version'];
+		$this->wp_override = isset( $_api_data['wp_override'] ) ? (bool) $_api_data['wp_override'] : false;
+		$this->beta        = ! empty( $this->api_data['beta'] ) ? true : false;
+
+		$edd_plugin_data[ $this->slug ] = $this->api_data;
+
+		/**
+		 * Fires after the $edd_plugin_data is setup.
+		 *
+		 * @since x.x.x
+		 *
+		 * @param array $edd_plugin_data Array of EDD SL plugin data.
+		 */
+		do_action( 'post_edd_sl_plugin_updater_setup', $edd_plugin_data );
+
+		// Set up hooks.
+		$this->init();
+
 	}
+
 	/**
-	 * Check for Plugin Update.
+	 * Set up WordPress filters to hook into WP's update process.
 	 *
-	 * @param object $transient Plugin update transient object.
+	 * @uses add_filter()
+	 *
+	 * @return void
 	 */
-	public function wpssw_update_plugins( $transient ) {
+	public function init() {
 
-		self::wpssw_set_plugins( true );
+		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_update' ) );
+		add_filter( 'plugins_api', array( $this, 'plugins_api_filter' ), 10, 3 );
+		add_action( 'after_plugin_row', array( $this, 'show_update_notification' ), 10, 2 );
+		add_action( 'admin_init', array( $this, 'show_changelog' ) );
 
-		// Process premium plugin updates.
-		$installed = array_merge( self::$plugins['active'], self::$plugins['installed'] );
-		$plugins   = self::wpssw_wp_plugins();
-		foreach ( $installed as $plugin => $premium ) {
-			if ( isset( $plugins[ $plugin ] ) && version_compare( $plugins[ $plugin ]['Version'], $premium['version'], '<' ) ) {
-				$_plugin                        = array(
-					'slug'        => 'wpsyncsheets-for-woocommerce',
-					'plugin'      => 'wpsyncsheets-for-woocommerce/wpsyncsheets-for-woocommerce.php',
-					'new_version' => $premium['version'],
-					'url'         => $premium['url'],
-					'package'     => $this->wpssw_deferred_download( $premium['id'] ),
-				);
-				$transient->response[ $plugin ] = (object) $_plugin;
+	}
+
+	/**
+	 * Check for Updates at the defined API endpoint and modify the update array.
+	 *
+	 * This function dives into the update API just when WordPress creates its update array,
+	 * then adds a custom API call and injects the custom plugin data retrieved from the API.
+	 * It is reassembled from parts of the native WordPress plugin update code.
+	 * See wp-includes/update.php line 121 for the original wp_update_plugins() function.
+	 *
+	 * @uses api_request()
+	 *
+	 * @param array $_transient_data Update array build by WordPress.
+	 * @return array Modified update array with custom plugin data.
+	 */
+	public function check_update( $_transient_data ) {
+
+		global $pagenow;
+
+		if ( ! is_object( $_transient_data ) ) {
+			$_transient_data = new stdClass();
+		}
+
+		if ( ! empty( $_transient_data->response ) && ! empty( $_transient_data->response[ $this->name ] ) && false === $this->wp_override ) {
+			return $_transient_data;
+		}
+
+		$current = $this->get_repo_api_data();
+		if ( false !== $current && is_object( $current ) && isset( $current->new_version ) ) {
+			if ( version_compare( $this->version, $current->new_version, '<' ) ) {
+				$_transient_data->response[ $this->name ] = $current;
+			} else {
+				// Populating the no_update information is required to support auto-updates in WordPress 5.5.
+				$_transient_data->no_update[ $this->name ] = $current;
 			}
 		}
-		return $transient;
+		$_transient_data->last_checked           = time();
+		$_transient_data->checked[ $this->name ] = $this->version;
+
+		return $_transient_data;
 	}
 
 	/**
-	 * Inject API data for premium plugins.
+	 * Get repo API data from store.
+	 * Save to cache.
 	 *
-	 * @since 1.0.0
-	 *
-	 * @param bool   $response Always false.
-	 * @param string $action The API action being performed.
-	 * @param object $args Plugin arguments.
-	 * @return bool|object $response The plugin info or false.
+	 * @return \stdClass
 	 */
-	public function wpssw_plugins_api( $response, $action, $args ) {
-		self::wpssw_set_plugins( true );
+	public function get_repo_api_data() {
+		$version_info = $this->get_cached_version_info();
 
-		// Process premium theme updates.
-		if ( 'plugin_information' === (string) $action && isset( $args->slug ) ) {
-			$installed = array_merge( self::$plugins['active'], self::$plugins['installed'] );
-			foreach ( $installed as $slug => $plugin ) {
-
-				if ( dirname( $slug ) === $args->slug ) {
-					$response                 = new stdClass();
-					$response->slug           = $args->slug;
-					$response->plugin         = $slug;
-					$response->plugin_name    = $plugin['name'];
-					$response->name           = $plugin['name'];
-					$response->version        = $plugin['version'];
-					$response->author         = $plugin['author'];
-					$response->homepage       = $plugin['url'];
-					$response->requires       = $plugin['requires'];
-					$response->tested         = $plugin['tested'];
-					$response->downloaded     = $plugin['number_of_sales'];
-					$response->last_updated   = $plugin['updated_at'];
-					$response->sections       = array( 'description' => $plugin['description'] );
-					$response->banners['low'] = $plugin['landscape_url'];
-					$response->rating         = ! empty( $plugin['rating'] ) && ! empty( $plugin['rating']['rating'] ) && $plugin['rating']['rating'] > 0 ? $plugin['rating']['rating'] / 5 * 100 : 0;
-					$response->num_ratings    = ! empty( $plugin['rating'] ) && ! empty( $plugin['rating']['count'] ) ? $plugin['rating']['count'] : 0;
-					$response->download_link  = $this->wpssw_deferred_download( $plugin['id'] );
-					break;
-				}
+		if ( false === $version_info ) {
+			$version_info = $this->api_request(
+				'plugin_latest_version',
+				array(
+					'slug' => $this->slug,
+					'beta' => $this->beta,
+				)
+			);
+			if ( ! $version_info ) {
+				return false;
 			}
-		}
-		return $response;
-	}
-	/**
-	 * Set Plugin.
-	 *
-	 * @param bool  $forced Wheather to clear cache or not.
-	 * @param bool  $use_cache Wheather to  use cache or not.
-	 * @param array $args Argument array.
-	 */
-	public function wpssw_set_plugins( $forced = false, $use_cache = false, $args = array() ) {
 
-		self::$plugins = get_site_transient( self::wpssw_sanitize_key( 'envato-market' ) . '_plugins' );
+			// This is required for your plugin to support auto-updates in WordPress 5.5.
+			$version_info->plugin = $this->name;
+			$version_info->id     = $this->name;
 
-		if ( false === (bool) self::$plugins || true === (bool) $forced ) {
-			$plugins = self::wpssw_plugins();
-			self::wpssw_process_plugins( $plugins, $args );
-		} elseif ( true === (bool) $use_cache ) {
-			self::wpssw_process_plugins( self::$plugins['purchased'], $args );
-		}
-	}
-	/**
-	 * Return List of Plugins.
-	 *
-	 * @param bool $flush Wheather to cache clear or not.
-	 */
-	public function wpssw_wp_plugins( $flush = false ) {
-		if ( empty( self::$wp_plugins ) || true === (bool) $flush ) {
-			wp_cache_flush();
-			self::$wp_plugins = get_plugins();
-		}
-		return self::$wp_plugins;
-	}
-	/**
-	 * Show update notice.
-	 *
-	 * @param array $args Array of plugins.
-	 */
-	public function wpssw_plugins( $args = array() ) {
-		$plugins  = array();
-		$url      = 'https://api.envato.com/v2/market/buyer/list-purchases?filter_by=wordpress-plugins';
-		$response = self::wpssw_request( $url, $args );
-		if ( is_wp_error( $response ) || empty( $response ) || empty( $response['results'] ) ) {
-			return $plugins;
+			$this->set_version_info_cache( $version_info );
 		}
 
-		foreach ( $response['results'] as $plugin ) {
-			if ( (string) WPSSW_PLUGIN_ID === (string) $plugin['item']['id'] ) {
-				$plugins[] = self::wpssw_normalize_plugin( $plugin['item'] );
+		return $version_info;
+	}
+
+	/**
+	 * Show the update notification on multisite subsites.
+	 *
+	 * @param string $file File.
+	 * @param array  $plugin Plugin Array.
+	 */
+	public function show_update_notification( $file, $plugin ) {
+
+		// Return early if in the network admin, or if this is not a multisite install.
+		if ( is_network_admin() || ! is_multisite() ) {
+			return;
+		}
+
+		if ( ! current_user_can( 'update_plugins' ) ) {
+			return;
+		}
+
+		if ( $this->name !== $file ) {
+			return;
+		}
+
+		// Do not print any message if update does not exist.
+		$update_cache = get_site_transient( 'update_plugins' );
+		if ( ! isset( $update_cache->response[ $this->name ] ) ) {
+			if ( ! is_object( $update_cache ) ) {
+				$update_cache = new stdClass();
 			}
+			$update_cache->response[ $this->name ] = $this->get_repo_api_data();
 		}
-		return $plugins;
-	}
 
-	/**
-	 * Normalize a plugin.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param  array $plugin An array of API request values.
-	 * @return array A normalized array of values.
-	 */
-	public function wpssw_normalize_plugin( $plugin ) {
-		$requires = null;
-		$tested   = null;
-		$versions = array();
-		// Set the required and tested WordPress version numbers.
-		foreach ( $plugin['attributes'] as $k => $v ) {
-			if ( ! empty( $v['name'] ) && 'compatible-software' === (string) $v['name'] && ! empty( $v['value'] ) && is_array( $v['value'] ) ) {
-				foreach ( $v['value'] as $version ) {
-					$versions[] = str_replace( 'WordPress ', '', trim( $version ) );
-				}
-				if ( ! empty( $versions ) ) {
-					$requires = $versions[ count( $versions ) - 1 ];
-					$tested   = $versions[0];
-				}
-				break;
-			}
+		// Return early if this plugin isn't in the transient->response or if the site is running the current or newer version of the plugin.
+		if ( empty( $update_cache->response[ $this->name ] ) || version_compare( $this->version, $update_cache->response[ $this->name ]->new_version, '>=' ) ) {
+			return;
 		}
-		$plugin_normalized = array(
-			'id'              => $plugin['id'],
-			'name'            => ( ! empty( $plugin['wordpress_plugin_metadata']['plugin_name'] ) ? $plugin['wordpress_plugin_metadata']['plugin_name'] : '' ),
-			'author'          => ( ! empty( $plugin['wordpress_plugin_metadata']['author'] ) ? $plugin['wordpress_plugin_metadata']['author'] : '' ),
-			'version'         => ( ! empty( $plugin['wordpress_plugin_metadata']['version'] ) ? $plugin['wordpress_plugin_metadata']['version'] : '' ),
-			'description'     => self::wpssw_remove_non_unicode( wp_strip_all_tags( $plugin['wordpress_plugin_metadata']['description'] ) ),
-			'url'             => ( ! empty( $plugin['url'] ) ? $plugin['url'] : '' ),
-			'author_url'      => ( ! empty( $plugin['author_url'] ) ? $plugin['author_url'] : '' ),
-			'thumbnail_url'   => ( ! empty( $plugin['thumbnail_url'] ) ? $plugin['thumbnail_url'] : '' ),
-			'landscape_url'   => ( ! empty( $plugin['previews']['landscape_preview']['landscape_url'] ) ? $plugin['previews']['landscape_preview']['landscape_url'] : '' ),
-			'requires'        => $requires,
-			'tested'          => $tested,
-			'number_of_sales' => ( ! empty( $plugin['number_of_sales'] ) ? $plugin['number_of_sales'] : '' ),
-			'updated_at'      => ( ! empty( $plugin['updated_at'] ) ? $plugin['updated_at'] : '' ),
-			'rating'          => ( ! empty( $plugin['rating'] ) ? $plugin['rating'] : '' ),
+
+		printf(
+			'<tr class="plugin-update-tr %3$s" id="%1$s-update" data-slug="%1$s" data-plugin="%2$s">',
+			$this->slug,
+			$file,
+			in_array( $this->name, $this->get_active_plugins(), true ) ? 'active' : 'inactive'
 		);
-		// No main thumbnail in API response, so we grab it from the preview array.
-		if ( empty( $plugin_normalized['landscape_url'] ) && ! empty( $plugin['previews'] ) && is_array( $plugin['previews'] ) ) {
-			foreach ( $plugin['previews'] as $possible_preview ) {
-				if ( ! empty( $possible_preview['landscape_url'] ) ) {
-					$plugin_normalized['landscape_url'] = $possible_preview['landscape_url'];
-					break;
-				}
-			}
-		}
-		if ( empty( $plugin_normalized['thumbnail_url'] ) && ! empty( $plugin['previews'] ) && is_array( $plugin['previews'] ) ) {
-			foreach ( $plugin['previews'] as $possible_preview ) {
-				if ( ! empty( $possible_preview['icon_url'] ) ) {
-					$plugin_normalized['thumbnail_url'] = $possible_preview['icon_url'];
-					break;
-				}
-			}
-		}
-		return $plugin_normalized;
-	}
 
-	/**
-	 * Query the Envato API.
-	 *
-	 * @uses wp_remote_get() To perform an HTTP request.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param  string $url API request URL, including the request method, parameters, & file type.
-	 * @param  array  $args The arguments passed to `wp_remote_get`.
-	 * @return array|WP_Error  The HTTP response.
-	 */
-	public function wpssw_request( $url, $args = array() ) {
-		$api_key  = get_option( 'wpssw_envato_apikey' );
-		$defaults = array(
-			'headers' => array(
-				'Authorization' => 'Bearer ' . $api_key,
-				'User-Agent'    => 'WordPress - Envato Market 2.0.3',
+		echo '<td colspan="3" class="plugin-update colspanchange">';
+		echo '<div class="update-message notice inline notice-warning notice-alt"><p>';
+
+		$changelog_link = '';
+		if ( ! empty( $update_cache->response[ $this->name ]->sections->changelog ) ) {
+			$changelog_link = add_query_arg(
+				array(
+					'edd_sl_action' => 'view_plugin_changelog',
+					'plugin'        => rawurlencode( $this->name ),
+					'slug'          => rawurlencode( $this->slug ),
+					'TB_iframe'     => 'true',
+					'width'         => 77,
+					'height'        => 911,
+				),
+				self_admin_url( 'index.php' )
+			);
+		}
+		$update_link = add_query_arg(
+			array(
+				'action' => 'upgrade-plugin',
+				'plugin' => rawurlencode( $this->name ),
 			),
-			'timeout' => 14,
+			self_admin_url( 'update.php' )
 		);
-		$args     = wp_parse_args( $args, $defaults );
-		$token    = trim( str_replace( 'Bearer', '', $args['headers']['Authorization'] ) );
-		if ( empty( $token ) ) {
-			return new WP_Error( 'api_token_error', __( 'An API token is required.', 'envato-market' ) );
-		}
-		$debugging_information = array(
-			'request_url' => $url,
+
+		printf(
+			/* translators: the plugin name. */
+			esc_html__( 'There is a new version of %1$s available.', 'wpssw' ),
+			esc_html( $plugin['Name'] )
 		);
-		// Make an API request.
-		$response = wp_remote_get( esc_url_raw( $url ), $args );
-		// Check the response code.
-		$response_code                            = wp_remote_retrieve_response_code( $response );
-		$response_message                         = wp_remote_retrieve_response_message( $response );
-		$debugging_information['response_code']   = $response_code;
-		$debugging_information['response_cf_ray'] = wp_remote_retrieve_header( $response, 'cf-ray' );
-		$debugging_information['response_server'] = wp_remote_retrieve_header( $response, 'server' );
-		if ( ! empty( $response->errors ) && isset( $response->errors['http_request_failed'] ) ) {
-			// API connectivity issue, inject notice into transient with more details.
-			return new WP_Error( 'http_error', esc_html( current( $response->errors['http_request_failed'] ) ), $debugging_information );
-		}
-		if ( 200 !== $response_code && ! empty( $response_message ) ) {
-			return new WP_Error( $response_code, $response_message, $debugging_information );
-		} elseif ( 200 !== $response_code ) {
-			return new WP_Error( $response_code, __( 'An unknown API error occurred.', 'envato-market' ), $debugging_information );
+
+		if ( empty( $update_cache->response[ $this->name ]->package ) && ! empty( $changelog_link ) ) {
+			printf(
+				/* translators: 1. opening anchor tag, do not translate 2. the new plugin version 3. closing anchor tag, do not translate. */
+				esc_html__( ' %1$sView version %2$s details%3$s.', 'wpssw' ),
+				'<a target="_blank" class="thickbox open-plugin-details-modal" href="' . esc_url( $changelog_link ) . '">',
+				esc_html( $update_cache->response[ $this->name ]->new_version ),
+				'</a>'
+			);
+		} elseif ( ! empty( $changelog_link ) ) {
+			printf(
+				/* translators: 1. opening anchor tag, do not translate 2. the new plugin version 3. closing anchor tag, do not translate. */
+				esc_html__( ' %1$sView version %2$s details%3$s or %4$supdate now%5$s.', 'wpssw' ),
+				'<a target="_blank" class="thickbox open-plugin-details-modal" href="' . esc_url( $changelog_link ) . '">',
+				esc_html( $update_cache->response[ $this->name ]->new_version ),
+				'</a>',
+				'<a target="_blank" class="update-link" href="' . esc_url( wp_nonce_url( $update_link, 'upgrade-plugin_' . $file ) ) . '">',
+				'</a>'
+			);
 		} else {
-			$return = json_decode( wp_remote_retrieve_body( $response ), true );
-			if ( null === $return ) {
-				return new WP_Error( 'api_error', __( 'An unknown API error occurred.', 'envato-market' ), $debugging_information );
-			}
-			return $return;
+			printf(
+				' %1$s%2$s%3$s',
+				'<a target="_blank" class="update-link" href="' . esc_url( wp_nonce_url( $update_link, 'upgrade-plugin_' . $file ) ) . '">',
+				esc_html__( 'Update now.', 'wpssw' ),
+				'</a>'
+			);
 		}
-	}
 
+		do_action( "in_plugin_update_message_{$file}", $plugin, $plugin );
 
-	/**
-	 * Process the plugins and save the transient.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param array $purchased The purchased plugins array.
-	 * @param array $args Used to remove or add a plugin during activate and deactivate routines.
-	 */
-	private function wpssw_process_plugins( $purchased, $args = array() ) {
-
-		if ( is_wp_error( $purchased ) ) {
-			$purchased = array();
-		}
-		$active    = array();
-		$installed = array();
-		$install   = $purchased;
-		if ( ! empty( $purchased ) ) {
-			foreach ( self::wpssw_wp_plugins( true ) as $slug => $plugin ) {
-				foreach ( $install as $key => $value ) {
-					if ( $this->wpssw_normalize( $value['name'] ) === $this->wpssw_normalize( $plugin['Name'] ) && $this->wpssw_normalize( $value['author'] ) === $this->wpssw_normalize( $plugin['Author'] ) && file_exists( WP_PLUGIN_DIR . '/' . $slug ) ) {
-						$installed[ $slug ] = $value;
-						unset( $install[ $key ] );
-					}
-				}
-			}
-		}
-		foreach ( $installed as $slug => $plugin ) {
-			$condition = false;
-			if ( ! empty( $args ) && (string) $slug === $args['plugin'] ) {
-				if ( true === (bool) $args['remove'] ) {
-					continue;
-				}
-				$condition = true;
-			}
-			if ( $condition || is_plugin_active( $slug ) ) {
-				$active[ $slug ] = $plugin;
-				unset( $installed[ $slug ] );
-			}
-		}
-		self::$plugins['purchased'] = array_unique( $purchased, SORT_REGULAR );
-		self::$plugins['active']    = array_unique( $active, SORT_REGULAR );
-		self::$plugins['installed'] = array_unique( $installed, SORT_REGULAR );
-		self::$plugins['install']   = array_unique( array_values( $install ), SORT_REGULAR );
-		set_site_transient( 'envato_market_plugins', self::$plugins, HOUR_IN_SECONDS );
-	}
-	/**
-	 * Return Normalize String.
-	 *
-	 * @param string $string String to noramlize.
-	 */
-	public function wpssw_normalize( $string ) {
-		return strtolower( html_entity_decode( wp_strip_all_tags( $string ) ) );
+		echo '</p></div></td></tr>';
 	}
 
 	/**
-	 * Deferred item download URL.
+	 * Gets the plugins active in a multisite network.
 	 *
-	 * @since 1.0.0
-	 *
-	 * @param int $id The item ID.
-	 * @return string.
+	 * @return array
 	 */
-	public function wpssw_deferred_download( $id ) {
-		if ( empty( $id ) ) {
-			return '';
+	private function get_active_plugins() {
+		$active_plugins         = (array) get_option( 'active_plugins' );
+		$active_network_plugins = (array) get_site_option( 'active_sitewide_plugins' );
+
+		return array_merge( $active_plugins, array_keys( $active_network_plugins ) );
+	}
+
+	/**
+	 * Updates information on the "View version x.x details" page with custom data.
+	 *
+	 * @uses api_request()
+	 *
+	 * @param mixed  $_data Data.
+	 * @param string $_action Action.
+	 * @param object $_args Argument Object.
+	 * @return object $_data
+	 */
+	public function plugins_api_filter( $_data, $_action = '', $_args = null ) {
+
+		if ( 'plugin_information' !== $_action ) {
+
+			return $_data;
+
 		}
-		$args = array(
-			'deferred_download' => true,
-			'item_id'           => $id,
+
+		if ( ! isset( $_args->slug ) || ( $_args->slug !== $this->slug ) ) {
+
+			return $_data;
+
+		}
+
+		$to_send = array(
+			'slug'   => $this->slug,
+			'is_ssl' => is_ssl(),
+			'fields' => array(
+				'banners' => array(),
+				'reviews' => false,
+				'icons'   => array(),
+			),
 		);
 
-		return add_query_arg( $args, esc_url( $this->wpssw_get_page_url() ) );
+		// Get the transient where we store the api request for this plugin for 24 hours.
+		$edd_api_request_transient = $this->get_cached_version_info();
+
+		// If we have no transient-saved value, run the API, set a fresh transient with the API value, and return that value too right now.
+		if ( empty( $edd_api_request_transient ) ) {
+
+			$api_response = $this->api_request( 'plugin_information', $to_send );
+
+			// Expires in 3 hours.
+			$this->set_version_info_cache( $api_response );
+
+			if ( false !== $api_response ) {
+				$_data = $api_response;
+			}
+		} else {
+			$_data = $edd_api_request_transient;
+		}
+
+		// Convert sections into an associative array, since we're getting an object, but Core expects an array.
+		if ( isset( $_data->sections ) && ! is_array( $_data->sections ) ) {
+			$_data->sections = $this->convert_object_to_array( $_data->sections );
+		}
+
+		// Convert banners into an associative array, since we're getting an object, but Core expects an array.
+		if ( isset( $_data->banners ) && ! is_array( $_data->banners ) ) {
+			$_data->banners = $this->convert_object_to_array( $_data->banners );
+		}
+
+		// Convert icons into an associative array, since we're getting an object, but Core expects an array.
+		if ( isset( $_data->icons ) && ! is_array( $_data->icons ) ) {
+			$_data->icons = $this->convert_object_to_array( $_data->icons );
+		}
+
+		// Convert contributors into an associative array, since we're getting an object, but Core expects an array.
+		if ( isset( $_data->contributors ) && ! is_array( $_data->contributors ) ) {
+			$_data->contributors = $this->convert_object_to_array( $_data->contributors );
+		}
+
+		if ( ! isset( $_data->plugin ) ) {
+			$_data->plugin = $this->name;
+		}
+
+		return $_data;
 	}
 
 	/**
-	 * Return the plugin page URL.
+	 * Convert some objects to arrays when injecting data into the update API
 	 *
-	 * @since 1.0.0
+	 * Some data like sections, banners, and icons are expected to be an associative array, however due to the JSON
+	 * decoding, they are objects. This method allows us to pass in the object and return an associative array.
 	 *
+	 * @since 3.6.5
+	 *
+	 * @param stdClass $data Standard Object.
+	 *
+	 * @return array
+	 */
+	private function convert_object_to_array( $data ) {
+		if ( ! is_array( $data ) && ! is_object( $data ) ) {
+			return array();
+		}
+		$new_data = array();
+		foreach ( $data as $key => $value ) {
+			$new_data[ $key ] = is_object( $value ) ? $this->convert_object_to_array( $value ) : $value;
+		}
+
+		return $new_data;
+	}
+
+	/**
+	 * Disable SSL verification in order to prevent download update failures
+	 *
+	 * @param array  $args Argument.
+	 * @param string $url Url.
+	 * @return object $array Object.
+	 */
+	public function http_request_args( $args, $url ) {
+
+		if ( strpos( $url, 'https://' ) !== false && strpos( $url, 'edd_action=package_download' ) ) {
+			$args['sslverify'] = $this->verify_ssl();
+		}
+		return $args;
+
+	}
+
+	/**
+	 * Calls the API and, if successfull, returns the object delivered by the API.
+	 *
+	 * @uses get_bloginfo()
+	 * @uses wp_remote_post()
+	 * @uses is_wp_error()
+	 *
+	 * @param string $_action The requested action.
+	 * @param array  $_data   Parameters for the API action.
+	 * @return false|object
+	 */
+	private function api_request( $_action, $_data ) {
+
+		global $edd_plugin_url_available;
+
+		// Do a quick status check on this domain if we haven't already checked it.
+		$store_hash = md5( $this->api_url );
+		if ( ! is_array( $edd_plugin_url_available ) || ! isset( $edd_plugin_url_available[ $store_hash ] ) ) {
+			$test_url_parts = wp_parse_url( $this->api_url );
+
+			$scheme = ! empty( $test_url_parts['scheme'] ) ? $test_url_parts['scheme'] : 'http';
+			$host   = ! empty( $test_url_parts['host'] ) ? $test_url_parts['host'] : '';
+			$port   = ! empty( $test_url_parts['port'] ) ? ':' . $test_url_parts['port'] : '';
+
+			if ( empty( $host ) ) {
+				$edd_plugin_url_available[ $store_hash ] = false;
+			} else {
+				$test_url                                = $scheme . '://' . $host . $port;
+				$response                                = wp_remote_get(
+					$test_url,
+					array(
+						'timeout'   => $this->health_check_timeout,
+						'sslverify' => $this->verify_ssl(),
+					)
+				);
+				$edd_plugin_url_available[ $store_hash ] = is_wp_error( $response ) ? false : true;
+			}
+		}
+
+		if ( false === $edd_plugin_url_available[ $store_hash ] ) {
+			return false;
+		}
+
+		$data = array_merge( $this->api_data, $_data );
+
+		if ( $data['slug'] !== $this->slug ) {
+			return;
+		}
+
+		// Don't allow a plugin to ping itself.
+		if ( trailingslashit( home_url() ) === $this->api_url ) {
+			return false;
+		}
+
+		return $this->get_version_from_remote();
+	}
+
+	/**
+	 * If available, show the changelog for sites in a multisite install.
+	 */
+	public function show_changelog() {
+		// @codingStandardsIgnoreStart.
+		if ( empty( $_REQUEST['edd_sl_action'] ) || 'view_plugin_changelog' !== $_REQUEST['edd_sl_action'] ) {
+			return;
+		}
+
+		if ( empty( $_REQUEST['plugin'] ) ) {
+			return;
+		}
+
+		if ( empty( $_REQUEST['slug'] ) || $this->slug !== $_REQUEST['slug'] ) {
+			return;
+		}
+		// @codingStandardsIgnoreEnd.
+		if ( ! current_user_can( 'update_plugins' ) ) {
+			wp_die( esc_html__( 'You do not have permission to install plugin updates', 'wpssw' ), esc_html__( 'Error', 'wpssw' ), array( 'response' => 403 ) );
+		}
+
+		$version_info = $this->get_repo_api_data();
+		if ( isset( $version_info->sections ) ) {
+			$sections = $this->convert_object_to_array( $version_info->sections );
+			if ( ! empty( $sections['changelog'] ) ) {
+				echo '<div style="background:#fff;padding:10px;">' . wp_kses_post( $sections['changelog'] ) . '</div>';
+			}
+		}
+
+		exit;
+	}
+
+	/**
+	 * Gets the current version information from the remote site.
+	 *
+	 * @return array|false
+	 */
+	private function get_version_from_remote() {
+		$api_params = array(
+			'edd_action'  => 'get_version',
+			'license'     => ! empty( $this->api_data['license'] ) ? $this->api_data['license'] : '',
+			'item_name'   => isset( $this->api_data['item_name'] ) ? $this->api_data['item_name'] : false,
+			'item_id'     => isset( $this->api_data['item_id'] ) ? $this->api_data['item_id'] : false,
+			'version'     => isset( $this->api_data['version'] ) ? $this->api_data['version'] : false,
+			'slug'        => $this->slug,
+			'author'      => $this->api_data['author'],
+			'url'         => home_url(),
+			'beta'        => $this->beta,
+			'php_version' => phpversion(),
+			'wp_version'  => get_bloginfo( 'version' ),
+		);
+
+		/**
+		 * Filters the parameters sent in the API request.
+		 *
+		 * @param array  $api_params        The array of data sent in the request.
+		 * @param array  $this->api_data    The array of data set up in the class constructor.
+		 * @param string $this->plugin_file The full path and filename of the file.
+		 */
+		$api_params = apply_filters( 'edd_sl_plugin_updater_api_params', $api_params, $this->api_data, $this->plugin_file );
+
+		$request = wp_remote_post(
+			$this->api_url,
+			array(
+				'timeout'   => 15,
+				'sslverify' => $this->verify_ssl(),
+				'body'      => $api_params,
+			)
+		);
+
+		if ( is_wp_error( $request ) ) {
+			return false;
+		}
+
+		$request = json_decode( wp_remote_retrieve_body( $request ) );
+
+		if ( $request && isset( $request->sections ) ) {
+			$request->sections = maybe_unserialize( $request->sections );
+		} else {
+			$request = false;
+		}
+
+		if ( $request && isset( $request->banners ) ) {
+			$request->banners = maybe_unserialize( $request->banners );
+		}
+
+		if ( $request && isset( $request->icons ) ) {
+			$request->icons = maybe_unserialize( $request->icons );
+		}
+
+		if ( ! empty( $request->sections ) ) {
+			foreach ( $request->sections as $key => $section ) {
+				$request->$key = (array) $section;
+			}
+		}
+
+		return $request;
+	}
+
+	/**
+	 * Get the version info from the cache, if it exists.
+	 *
+	 * @param string $cache_key Cache Key.
+	 * @return object
+	 */
+	public function get_cached_version_info( $cache_key = '' ) {
+
+		if ( empty( $cache_key ) ) {
+			$cache_key = $this->get_cache_key();
+		}
+
+		$cache = get_option( $cache_key );
+
+		// Cache is expired.
+		if ( empty( $cache['timeout'] ) || time() > $cache['timeout'] ) {
+			return false;
+		}
+
+		// We need to turn the icons into an array, thanks to WP Core forcing these into an object at some point.
+		$cache['value'] = json_decode( $cache['value'] );
+		if ( ! empty( $cache['value']->icons ) ) {
+			$cache['value']->icons = (array) $cache['value']->icons;
+		}
+
+		return $cache['value'];
+
+	}
+
+	/**
+	 * Adds the plugin version information to the database.
+	 *
+	 * @param string $value Value.
+	 * @param string $cache_key Cache Key.
+	 */
+	public function set_version_info_cache( $value = '', $cache_key = '' ) {
+
+		if ( empty( $cache_key ) ) {
+			$cache_key = $this->get_cache_key();
+		}
+
+		$data = array(
+			'timeout' => strtotime( '+3 hours', time() ),
+			'value'   => wp_json_encode( $value ),
+		);
+
+		update_option( $cache_key, $data, 'no' );
+
+		// Delete the duplicate option.
+		//phpcs:ignore
+		delete_option( 'edd_api_request_' . md5( serialize( $this->slug . $this->api_data['license'] . $this->beta ) ) );
+	}
+
+	/**
+	 * Returns if the SSL of the store should be verified.
+	 *
+	 * @since  1.6.13
+	 * @return bool
+	 */
+	private function verify_ssl() {
+		return (bool) apply_filters( 'edd_sl_api_request_verify_ssl', true, $this );
+	}
+
+	/**
+	 * Gets the unique key (option name) for a plugin.
+	 *
+	 * @since 1.9.0
 	 * @return string
 	 */
-	public function wpssw_get_page_url() {
-		return admin_url( 'admin.php?page=' . $this->slug );
+	private function get_cache_key() {
+		$string = $this->slug . $this->api_data['license'] . $this->beta;
+		//phpcs:ignore
+		return 'edd_sl_' . md5( serialize( $string ) );
 	}
-	/**
-	 * Return sanitize Key.
-	 *
-	 * @param string $key Key to sanitize.
-	 */
-	private function wpssw_sanitize_key( $key ) {
-		return preg_replace( '/[^A-Za-z0-9\_]/i', '', str_replace( array( '-', ':' ), '_', $key ) );
-	}
-	/**
-	 * Remove Non Unicode from string.
-	 *
-	 * @param string $retval String.
-	 */
-	private static function wpssw_remove_non_unicode( $retval ) {
-		return preg_replace( '/[\x00-\x1F\x80-\xFF]/', '', $retval );
-	}
+
 }

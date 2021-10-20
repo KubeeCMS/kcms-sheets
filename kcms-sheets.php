@@ -7,7 +7,7 @@
  * Author URI: https://github.com/KubeeCMS/
  * Text Domain: wpssw
  * Domain Path: /languages
- * Version: 6.3
+ * Version: 6.4
  * WC tested up to: 4.6.0
  *
  * @package     wpsyncsheets-for-woocommerce
@@ -21,8 +21,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 define( 'WPSSW_PLUGIN_SECURITY', 1 );
 define( 'WPSSW_URL', plugin_dir_url( __FILE__ ) );
-define( 'WPSSW_VERSION', '6.3' );
+define( 'WPSSW_VERSION', '6.4' );
 define( 'WPSSW_PLUGIN_ID', '22636997' );
+define( 'WPSSW_PLUGIN_ITEM_ID', '1378' );
+define( 'WPSSW_STORE_URL', 'https://wpsyncsheets.com/' );
+define( 'WPSSW_PLUGIN_NAME', 'WPSyncSheets For WooCommerce' );
 define( 'WPSSW_PLUGIN_PATH', untrailingslashit( plugin_dir_path( __FILE__ ) ) );
 define( 'WPSSW_DIRECTORY', dirname( plugin_basename( __FILE__ ) ) );
 define( 'WPSSW_PLUGIN_SLUG', WPSSW_DIRECTORY . '/' . basename( __FILE__ ) );
@@ -32,7 +35,7 @@ define( 'WPSSW_SUPPORT_MENU_URL', 'https://support.wpsyncsheets.com/index.php/si
 if ( ! class_exists( 'WPSSW_Dependencies' ) ) {
 	require_once trailingslashit( dirname( __FILE__ ) ) . 'includes/class-wpssw-dependencies.php';
 }
-// Check WPSSW Dependency Class.
+// Check WPSSW Dependency Class and WooCommerce Activation.
 if ( WPSSW_Dependencies::wpssw_is_woocommerce_active() ) {
 	// Add methods if WooCommerce is active.
 	add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'wpssw_add_action_links' );

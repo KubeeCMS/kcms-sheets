@@ -51,10 +51,14 @@ if ( ! class_exists( 'WPSSW_Product_Import' ) ) :
 			if ( 'yes' !== (string) $wpssw_product_spreadsheet_setting ) {
 				return;
 			}
-			$wpssw_sheet           = "'" . $wpssw_sheetname . "'!A:A";
-			$wpssw_allentry        = self::$instance_api->get_row_list( $wpssw_spreadsheetid, $wpssw_sheetname );
-			$wpssw_data            = $wpssw_allentry->getValues();
-			$wpssw_headers         = array_shift( $wpssw_data );
+			$wpssw_sheet    = "'" . $wpssw_sheetname . "'!A:A";
+			$wpssw_allentry = self::$instance_api->get_row_list( $wpssw_spreadsheetid, $wpssw_sheetname );
+			$wpssw_data     = $wpssw_allentry->getValues();
+			$wpssw_headers  = array_shift( $wpssw_data );
+			if ( ! in_array( 'Product Id', $wpssw_headers, true ) || ! in_array( 'Product Variation Id', $wpssw_headers, true ) ) {
+				echo esc_html( 'notexist' );
+				die;
+			}
 			$wpssw_insert_products = array();
 			$wpssw_update_products = array();
 			$wpssw_delete_products = array();

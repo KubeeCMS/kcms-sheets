@@ -41,6 +41,25 @@ class WPSSW_Setting {
 	 */
 	protected static $wpssw_default_status = array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' );
 	/**
+	 * Plugin License Page URL
+	 *
+	 * @var $wpssw_license_page
+	 */
+	protected static $wpssw_license_page = 'wpsyncsheets-for-woocommerce&tab=em-settings';
+	/**
+	 * Register Link
+	 *
+	 * @var $wpssw_register_link
+	 */
+	protected static $wpssw_register_link = 'https://www.wpsyncsheets.com/checkout/?edd_action=add_to_cart&download_id=1378&discount=ENVATO100';
+
+	/**
+	 * Plugin Store URL
+	 *
+	 * @var $wpssw_store_url
+	 */
+	protected static $wpssw_store_url = WPSSW_STORE_URL;
+	/**
 	 * Default status slug of post
 	 *
 	 * @var $wpssw_default_status_slug
@@ -66,7 +85,6 @@ class WPSSW_Setting {
 		$wpssw_include->wpssw_include_plugin_hook();
 		self::wpssw_google_api();
 		self::wpssw_license()->init();
-		self::wpssw_updater()->init();
 	}
 	/**
 	 * LICENSE functions
@@ -78,7 +96,21 @@ class WPSSW_Setting {
 	 * UPDATE functions
 	 */
 	public static function wpssw_updater() {
-		return WPSSW_Plugin_Update::instance();
+		return new WPSSW_Plugin_Update();
+	}
+
+	/**
+	 * Plugin Activation Hook
+	 */
+	public static function wpssw_activation() {
+		self::wpssw_update_option( 'active_wpssw', 1 );
+	}
+
+	/**
+	 * Plugin Deactivation Hook
+	 */
+	public static function wpssw_deactivation() {
+		self::wpssw_update_option( 'active_wpssw', '' );
 	}
 	/**
 	 * Register a plugin menu page.
@@ -106,6 +138,22 @@ class WPSSW_Setting {
 		}
 		self::remove_duplicate_submenu_page();
 	}
+
+	/**
+	 * License Key admin notice.
+	 */
+	public static function wpssw_license_notice() {
+		$enable = self::wpssw_check_license_key();
+		if ( ! $enable ) {
+			echo '
+			<div class="notice notice-info">
+				<p><strong>' . esc_html__( 'Welcome to WPSyncSheets', 'wpssw' ) . '</strong></p>
+				<p>' . esc_html__( 'Please', 'wpssw' ) . ' <a href="' . esc_url( 'admin.php?page=' . self::$wpssw_license_page ) . '">' . esc_html__( 'register', 'wpssw' ) . '</a> ' . esc_html__( 'this version of plugin to get an access for auto updates.', 'wpssw' ) . '</p>
+				<p><strong>' . esc_html__( 'Important!', 'wpssw' ) . '</strong> ' . esc_html__( 'One', 'wpssw' ) . ' <a target="_blank" href="https://codecanyon.net/licenses/standard">' . esc_html__( 'standard license', 'wpssw' ) . '</a> ' . esc_html__( 'is valid only for', 'wpssw' ) . ' <strong>' . esc_html__( '1 website', 'wpssw' ) . '</strong>. ' . esc_html__( 'Running multiple websites on a single license is a copyright violation.', 'wpssw' ) . '</p>
+			</div>
+			';
+		}
+	}
 	/**
 	 * Documentation and Support Page Link.
 	 *
@@ -114,7 +162,7 @@ class WPSSW_Setting {
 	 * @since 1.0.0
 	 * @access public
 	 */
-	public function wppsw_handle_external_redirects() {
+	public static function wppsw_handle_external_redirects() {
 		// phpcs:ignore
 		if ( empty( $_GET['page'] ) ) {
 			return;
@@ -223,6 +271,13 @@ class WPSSW_Setting {
 		$wpssw_generalsettings = '';
 		$wpssw_emsettings      = '';
 		$wpssw_supportsettings = '';
+
+		$disbledbtn = '';
+		$enable     = self::wpssw_check_license_key();
+		if ( ! $enable || ( isset( $_GET['tab'] ) && ! $enable && 'em-settings' !== (string) sanitize_text_field( wp_unslash( $_GET['tab'] ) ) ) ) {
+			$_GET['tab'] = 'em-settings';
+		}
+
 		// General Settings Tab.
 		if ( isset( $_GET['tab'] ) && 'general-settings' === (string) sanitize_text_field( wp_unslash( $_GET['tab'] ) ) ) {
 			if ( isset( $_POST['submit'] ) ) {
@@ -247,6 +302,19 @@ class WPSSW_Setting {
 		} elseif ( isset( $_GET['tab'] ) && 'event-settings' === (string) sanitize_text_field( wp_unslash( $_GET['tab'] ) ) && self::wpssw_is_event_calender_ticket_active() ) {
 			if ( isset( $_POST['submit'] ) ) {
 				WPSSW_Event::wpssw_update_event_settings();
+			}
+		} elseif ( isset( $_GET['tab'] ) && 'em-settings' === (string) sanitize_text_field( wp_unslash( $_GET['tab'] ) ) ) {
+			if ( isset( $_POST['submit'] ) ) {
+				if ( isset( $_POST['wpssw_license_key'] ) ) {
+					$wpssw_lince = sanitize_text_field( wp_unslash( $_POST['wpssw_license_key'] ) );
+					self::wpssw_update_option( 'wpssw_license_key', $wpssw_lince );
+				}
+			}
+			if ( isset( $_POST['wpssw_license_activate'] ) ) {
+				self::wpssw_activate_license( $_POST );
+			}
+			if ( isset( $_POST['wpssw_license_deactivate'] ) ) {
+				self::wpssw_deactivate_license();
 			}
 		} else {
 			// Google API Settings Tab.
@@ -286,6 +354,11 @@ class WPSSW_Setting {
 				}
 			}
 		}
+		$disbledbtn = '';
+		$enable     = self::wpssw_check_license_key();
+		if ( ! $enable ) {
+			$disbledbtn = 'disabled';
+		}
 		?>
 		<!-- .wrap -->
 		<div class="vertical-tabs">
@@ -300,44 +373,49 @@ class WPSSW_Setting {
 				</div>
 			</div>
 			<div class="tab">
-				<button class="tablinks googleapi-settings" onclick="wpsswTab(event, 'googleapi-settings')">
+				<button class="tablinks googleapi-settings" onclick="wpsswTab(event, 'googleapi-settings')"
+				<?php
+				if ( ! empty( $disbledbtn ) ) {
+					echo 'disabled="disabled"'; }
+				?>
+				>
 					<span class="tab-icon"></span>
 					<?php echo esc_html__( 'Google API', 'wpssw' ); ?> <br><?php echo esc_html__( 'Settings', 'wpssw' ); ?></button>
 				<button class="tablinks general-settings" onclick="wpsswTab(event, 'general-settings')" 
 				<?php
-				if ( ! empty( $wpssw_error ) ) {
+				if ( ! empty( $wpssw_error ) || ! empty( $disbledbtn ) ) {
 					echo 'disabled="disabled"'; }
 				?>
 				> <span class="tab-icon"></span><?php echo esc_html__( 'General', 'wpssw' ); ?> <br><?php echo esc_html__( 'Settings', 'wpssw' ); ?></button>
 				<button class="tablinks product-settings" onclick="wpsswTab(event, 'product-settings')" 
 				<?php
-				if ( ! empty( $wpssw_error ) ) {
+				if ( ! empty( $wpssw_error ) || ! empty( $disbledbtn ) ) {
 					echo 'disabled="disabled"'; }
 				?>
 				> <span class="tab-icon"></span><?php echo esc_html__( 'Product', 'wpssw' ); ?> <br><?php echo esc_html__( 'Settings', 'wpssw' ); ?></button>
 				<button class="tablinks customer-settings" onclick="wpsswTab(event, 'customer-settings')" 
 				<?php
-				if ( ! empty( $wpssw_error ) ) {
+				if ( ! empty( $wpssw_error ) || ! empty( $disbledbtn ) ) {
 					echo 'disabled="disabled"'; }
 				?>
 				> <span class="tab-icon"></span><?php echo esc_html__( 'Customer', 'wpssw' ); ?> <br><?php echo esc_html__( 'Settings', 'wpssw' ); ?></button>
 				<button class="tablinks coupon-settings" onclick="wpsswTab(event, 'coupon-settings')" 
 				<?php
-				if ( ! empty( $wpssw_error ) ) {
+				if ( ! empty( $wpssw_error ) || ! empty( $disbledbtn ) ) {
 					echo 'disabled="disabled"'; }
 				?>
 				> <span class="tab-icon"></span> <?php echo esc_html__( 'Coupon', 'wpssw' ); ?> <br><?php echo esc_html__( 'Settings', 'wpssw' ); ?></button>
 				<?php if ( self::wpssw_is_event_calender_ticket_active() ) { ?>
 					<button class="tablinks event-settings" onclick="wpsswTab(event, 'event-settings')" 
 					<?php
-					if ( ! empty( $wpssw_error ) ) {
+					if ( ! empty( $wpssw_error || ! empty( $disbledbtn ) ) ) {
 						echo 'disabled="disabled"'; }
 					?>
 					> <span class="tab-icon"></span> <?php echo esc_html__( 'Event', 'wpssw' ); ?> <br><?php echo esc_html__( 'Settings', 'wpssw' ); ?></button>
 				<?php } ?>
 				<button class="tablinks export" onclick="wpsswTab(event, 'export')" 
 				<?php
-				if ( ! empty( $wpssw_error ) ) {
+				if ( ! empty( $wpssw_error ) || ! empty( $disbledbtn ) ) {
 					echo 'disabled="disabled"'; }
 				?>
 				> <span class="tab-icon"></span> <?php echo esc_html__( 'Export Orders', 'wpssw' ); ?></button>
@@ -348,7 +426,7 @@ class WPSSW_Setting {
 						?>
 							<button class="tablinks <?php echo esc_html( $tabkey ); ?>" onclick="wpsswTab(event, '<?php echo esc_html( $tabkey ); ?>')" 
 							<?php
-							if ( ! empty( $wpssw_error ) ) {
+							if ( ! empty( $wpssw_error ) || ! empty( $disbledbtn ) ) {
 								echo 'disabled="disabled"'; }
 							?>
 							> <span class="tab-icon"></span> <?php echo esc_html( $tabname ); ?></button>
@@ -356,7 +434,7 @@ class WPSSW_Setting {
 					}
 				}
 				?>
-				<button class="tablinks em-settings" onclick="wpsswTab(event, 'em-settings')"><span class="tab-icon"></span> <?php echo esc_html__( 'Envato Market', 'wpssw' ); ?><br><?php echo esc_html__( 'Settings', 'wpssw' ); ?></button>
+				<button class="tablinks em-settings" onclick="wpsswTab(event, 'em-settings')"><span class="tab-icon"></span> <?php echo esc_html__( 'License', 'wpssw' ); ?></button>
 			</div>
 			<div id="googleapi-settings" class="tabcontent">
 				<h3><?php echo esc_html__( 'Google API Settings', 'wpssw' ); ?></h3>
@@ -1418,42 +1496,106 @@ class WPSSW_Setting {
 				<?php } ?> 
 			</div>
 			<div id="em-settings" class="tabcontent">
-				<h3><?php echo esc_html__( 'Envato Market Settings', 'wpssw' ); ?></h3>
-				<form action="" method="post">
-					<?php wp_nonce_field( 'wpssw-special-string', '_wpnonce' ); ?>
-					<?php $wpssw_api_key = self::wpssw_option( 'wpssw_envato_apikey' ); ?>
-					<div class="envato-market-blocks">
-						<p> <?php echo esc_html__( 'This settings will give you smooth update experience for WPSyncSheets For WooCommerce customers. It will also notify users for new updates of the plugin.', 'wpssw' ); ?></p>
-						<p><strong><?php echo esc_html__( 'WPSyncSheets For WooCommerce- Manage WooCommerce Orders with Google Spreadsheet', 'wpssw' ); ?></strong>.</p>
-						<div class="wpssw-supportform">              
-							<div class="col-left">
-								<div class="description">
-									<p><?php echo esc_html__( 'Please follow the steps below:', 'wpssw' ); ?></p>
-									<ol>
-										<li><?php echo esc_html__( 'Generate an Envato API Personal Token by', 'wpssw' ); ?> <a href="<?php echo esc_url( 'https://build.envato.com/create-token/?default=t&amp;purchase:download=t&amp;purchase:list=t' ); ?>" target="_blank"><?php echo esc_html__( 'clicking this link', 'wpssw' ); ?></a></li>
-										<li><?php echo esc_html__( 'Name the token eg “My WordPress site”.', 'wpssw' ); ?></li>
-										<li><?php echo esc_html__( 'Ensure the following permissions are enabled:', 'wpssw' ); ?>
-											<ul>
-												<li><?php echo esc_html__( 'View and search Envato sites', 'wpssw' ); ?></li>
-												<li><?php echo esc_html__( 'Download your purchased items', 'wpssw' ); ?></li>
-												<li><?php echo esc_html__( "List purchases you've made", 'wpssw' ); ?></li>
-											</ul>
-										</li>
-										<li><?php echo esc_html__( 'Copy the token into the Envato API Personal Token box.', 'wpssw' ); ?></li>
-										<li><?php echo esc_html__( 'Click the "Save" button.', 'wpssw' ); ?></li>
-									</ol>
-								</div>
-								<div class="form-field">
-									<input type="text" name="ws_envato" id="ws_envato" value="<?php echo esc_attr( $wpssw_api_key ); ?>" placeholder="<?php echo esc_html__( 'Envato API Personal Token', 'wpssw' ); ?>" required />
-								</div>
-							</div>
-							<div class="col-right">
-							</div>
-						</div>
+				<h3><?php echo esc_html__( 'License', 'wpssw' ); ?></h3>
+				<?php
+				$wpssw_license = self::wpssw_option( 'wpssw_license_key' );
+				$wpssw_status  = self::wpssw_option( 'wpssw_license_status' );
+				?>
+				<p class="f16"><strong><?php echo esc_html__( 'Where can I find my purchase code?', 'wpssw' ); ?></strong></p>
+				<ol>
+					<li><?php echo esc_html__( 'Please go to', 'wpssw' ); ?> <a target="_blank" href="https://codecanyon.net/downloads"><?php echo esc_html( 'Codecanyon.net/downloads' ); ?></a></li>
+					<li><?php echo esc_html__( 'Click the', 'wpssw' ); ?> <strong><?php echo esc_html__( 'Download', 'wpssw' ); ?></strong> <?php echo esc_html__( 'button in WPSyncSheets For WooCommerce row.', 'wpssw' ); ?></li>
+					<li><?php echo esc_html__( 'Select', 'wpssw' ); ?> <strong><?php echo esc_html__( 'License Certificate &amp; Purchase code.', 'wpssw' ); ?></strong></li>
+					<li><?php echo esc_html__( 'Copy', 'wpssw' ); ?> <strong><?php echo esc_html__( 'Item Purchase Code', 'wpssw' ); ?></strong></li>
+					<li><?php echo esc_html__( 'Please go to', 'wpssw' ); ?> <a target="_blank" href="https://www.wpsyncsheets.com/checkout/?edd_action=add_to_cart&download_id=1378&discount=ENVATO100"><?php echo esc_html__( 'WPSyncSheets Envato User Registration', 'wpssw' ); ?></a> <?php echo esc_html__( 'and register with item purchase code.', 'wpssw' ); ?></li>
+					<li><?php echo esc_html__( 'After registration process click on View Licenses.', 'wpssw' ); ?></li>
+					<li><?php echo esc_html__( 'Click on key icon', 'wpssw' ); ?> <span class="dashicons dashicons-admin-network"></span> <?php echo esc_html__( 'to copy license key &amp; paste below license key field.', 'wpssw' ); ?></li>
+				</ol>
+				<div class="data-collection">
+
+						<p class="f16"><strong><?php echo esc_html__( 'Data collection', 'wpssw' ); ?></strong></p>
+						<p><?php echo esc_html__( 'WPSyncSheets does not collect any personal data. However, we gather some basic information about your website to validate your license and product registration. These are:', 'wpssw' ); ?></p>
+
+						<ol>
+							<li><?php echo esc_html__( 'The purchase code that was used for product registration.', 'wpssw' ); ?></li>
+							<li><?php echo esc_html__( 'The domain name that plugin uses.', 'wpssw' ); ?></li>
+						</ol>
+
+						<p><?php echo esc_html__( 'In order to serve and check for updates, from time to time, your WordPress installation establishes an anonymous connection to our servers.', 'wpssw' ); ?></p>
+
 					</div>
-					<p class="submit"><img src="<?php dirname( __FILE__ ); ?>images/spinner.gif" id="licenceloader"><span id="licencetext"><?php echo esc_html__( 'Activating...', 'wpssw' ); ?></span><input type="submit" name="submit" id="licence_submit" class="wpssw-button wpssw-button-primary" value="Save"></p>
-					<span class="wpssw-license-result"></span>
-				</form>
+				<div>
+					<form method="post" action="<?php echo esc_html( admin_url( 'admin.php?page=wpsyncsheets-for-woocommerce&tab=em-settings' ) ); ?>">
+						<?php
+						if ( isset( $_GET['sl_activation'] ) && ! empty( sanitize_text_field( wp_unslash( $_GET['message'] ) ) ) ) {
+							switch ( $_GET['sl_activation'] ) {
+								case 'false':
+									$message = urldecode( sanitize_text_field( wp_unslash( $_GET['message'] ) ) );
+									?>
+										<div class="error">
+											<p><?php echo esc_html( $message ); ?></p>
+										</div>
+										<?php
+									break;
+								case 'true':
+								default:
+									break;
+							}
+						}
+						?>
+						<table class="form-table">
+							<tbody>
+								<tr valign="top">
+									<th scope="row" valign="top">
+										<?php echo esc_html__( 'License Key', 'wpssw' ); ?>
+									</th>
+									<td>
+										<?php
+										$readonly = false;
+										if ( false !== $wpssw_status && 'valid' === (string) $wpssw_status ) {
+											$readonly = true;
+										}
+										if ( $readonly ) {
+											?>
+											<input id="wpssw_license_key" name="wpssw_license_key" type="text" class="regular-text" value="<?php echo esc_attr( $wpssw_license ); ?>" placeholder="<?php echo esc_html__( 'Enter your license key', 'wpssw' ); ?>" readonly/>
+											<?php
+										} else {
+											?>
+											<input id="wpssw_license_key" name="wpssw_license_key" type="text" class="regular-text" value="<?php echo esc_attr( $wpssw_license ); ?>" placeholder="<?php echo esc_html__( 'Enter your license key', 'wpssw' ); ?>"/>
+											<?php
+										}
+										?>
+										<label class="description" for="wpssw_license_key"></label>
+										<a href="<?php echo esc_url( self::$wpssw_register_link ); ?>" target="_blank" class="wpssw-register-link"><?php echo esc_html__( 'Click to generate license key', 'wpssw' ); ?></a>
+									</td>
+								</tr>
+					<?php if ( ! empty( $wpssw_license ) ) { ?>
+						<tr valign="top">
+							<th scope="row" valign="top">
+								<?php echo esc_html__( 'Activate License', 'wpssw' ); ?>
+							</th>
+							<td>
+								<?php if ( false !== $wpssw_status && 'valid' === (string) $wpssw_status ) { ?>
+									<span class="wpssw-license-status"><?php echo esc_html__( 'Active', 'wpssw' ); ?></span>
+									<?php wp_nonce_field( 'wpssw_edd_nonce', 'wpssw_edd_nonce' ); ?>
+									<input type="submit" class="wpssw-button" name="wpssw_license_deactivate" value="<?php echo esc_html__( 'Deactivate License', 'wpssw' ); ?>"/>
+									<?php
+								} else {
+									wp_nonce_field( 'wpssw_edd_nonce', 'wpssw_edd_nonce' );
+									?>
+									<input type="submit" class="wpssw-button" name="wpssw_license_activate" value="<?php echo esc_html__( 'Activate License', 'wpssw' ); ?>"/>
+								<?php } ?>
+							</td>
+						</tr>
+					<?php } ?>
+				</tbody>
+			</table>
+			<input type="submit" name="submit"  class="wpssw-button wpssw-button-primary" value="Save">
+		</form>
+		<p class="box">
+			<strong><?php echo esc_html__( 'Important!', 'wpssw' ); ?></strong> <?php echo esc_html__( 'One', 'wpssw' ); ?> <a target="_blank" href="https://codecanyon.net/licenses/standard">standard license</a> <?php echo esc_html__( 'is valid only for', 'wpssw' ); ?> <strong><?php echo esc_html__( '1 website', 'wpssw' ); ?></strong>. <?php echo esc_html__( 'Running multiple websites on a single license is a copyright violation.', 'wpssw' ); ?><br>
+			<?php echo esc_html__( 'When moving a site from one domain to another please deregister the license key of the plugin first.', 'wpssw' ); ?>
+		</p>
 			</div>  
 		</div>
 		<?php
@@ -2167,6 +2309,183 @@ class WPSSW_Setting {
 			}
 		}
 		return true;
+	}
+	/**
+	 * Activate License for site.
+	 *
+	 * @param string $data Posted Data.
+	 */
+	public static function wpssw_activate_license( $data = array() ) {
+		// listen for our activate button to be clicked.
+
+		if ( isset( $data['wpssw_license_activate'] ) ) {
+
+			// run a quick security check.
+			if ( ! check_admin_referer( 'wpssw_edd_nonce', 'wpssw_edd_nonce' ) ) {
+				return; // get out if we didn't click the Activate button.
+			}
+
+			// retrieve the license from the database.
+			$license = trim( self::wpssw_option( 'wpssw_license_key' ) );
+
+			// data to send in our API request.
+			$api_params = array(
+				'edd_action' => 'activate_license',
+				'license'    => $license,
+				'item_name'  => rawurlencode( WPSSW_PLUGIN_NAME ),
+				'url'        => home_url(),
+			);
+
+			// Call the custom API.
+			$response = wp_remote_post(
+				self::$wpssw_store_url,
+				array(
+					'timeout'   => 15,
+					'sslverify' => false,
+					'body'      => $api_params,
+				)
+			);
+
+			// make sure the response came back okay.
+			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+
+				$message = ( is_wp_error( $response ) && ! empty( $response->get_error_message() ) ) ? $response->get_error_message() : __( 'An error occurred, please try again.' );
+
+			} else {
+
+				$license_data = json_decode( wp_remote_retrieve_body( $response ) );
+
+				if ( false === $license_data->success ) {
+
+					switch ( $license_data->error ) {
+
+						case 'expired':
+							$message = sprintf(
+								/* translators: expiry date. */
+								__( 'Your license key expired on %s.' ),
+								date_i18n( self::wpssw_option( 'date_format' ), strtotime( $license_data->expires, mktime() ) )
+							);
+							break;
+
+						case 'revoked':
+							$message = __( 'Your license key has been disabled.' );
+							break;
+
+						case 'missing':
+							$message = __( 'Invalid license.' );
+							break;
+
+						case 'invalid':
+						case 'site_inactive':
+							$message = __( 'Your license is not active for this URL.' );
+							break;
+
+						case 'item_name_mismatch':
+							/* translators: the plugin name. */
+							$message = sprintf( __( 'This appears to be an invalid license key for %s.' ), 'wpssw' );
+							break;
+
+						case 'no_activations_left':
+							$message = __( 'Your license key has reached its activation limit.' );
+							break;
+
+						default:
+							$message = __( 'An error occurred, please try again.' );
+							break;
+					}
+				}
+			}
+
+			// Check if anything passed on a message constituting a failure.
+			if ( ! empty( $message ) ) {
+				$base_url = admin_url( 'admin.php?page=' . self::$wpssw_license_page );
+				$redirect = add_query_arg(
+					array(
+						'sl_activation' => 'false',
+						'message'       => rawurlencode( $message ),
+					),
+					$base_url
+				);
+
+				wp_safe_redirect( $redirect );
+				exit();
+			}
+			self::wpssw_update_option( 'wpssw_license_status', $license_data->license );
+			wp_safe_redirect( admin_url( 'admin.php?page=' . self::$wpssw_license_page ) );
+			exit();
+		}
+	}
+	/**
+	 * Deactivate License for site.
+	 */
+	public static function wpssw_deactivate_license() {
+
+		$license = trim( self::wpssw_option( 'wpssw_license_key' ) );
+		// run a quick security check.
+		if ( ! check_admin_referer( 'wpssw_edd_nonce', 'wpssw_edd_nonce' ) ) {
+			return; // get out if we didn't click the Deactivate button.
+		}
+		// data to send in our API request.
+		$api_params = array(
+			'edd_action'  => 'deactivate_license',
+			'license'     => $license,
+			'item_id'     => WPSSW_PLUGIN_ITEM_ID,
+			'item_name'   => rawurlencode( WPSSW_PLUGIN_NAME ),
+			'url'         => home_url(),
+			'environment' => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
+		);
+
+		$response = wp_remote_post(
+			self::$wpssw_store_url,
+			array(
+				'timeout'   => 15,
+				'sslverify' => false,
+				'body'      => $api_params,
+			)
+		);
+
+		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+
+			if ( is_wp_error( $response ) ) {
+				$message = $response->get_error_message();
+			} else {
+				$message = __( 'An error occurred, please try again.' );
+			}
+
+			$redirect = add_query_arg(
+				array(
+					'page'          => self::$wpssw_license_page,
+					'sl_activation' => 'false',
+					'message'       => rawurlencode( $message ),
+				),
+				admin_url( 'admin.php?page=' )
+			);
+
+			wp_safe_redirect( $redirect );
+			exit();
+		}
+
+		// decode the license data.
+		$license_data = json_decode( wp_remote_retrieve_body( $response ) );
+
+		if ( 'deactivated' === $license_data->license ) {
+			delete_option( 'wpssw_license_status' );
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=' . self::$wpssw_license_page ) );
+		exit();
+	}
+
+	/**
+	 * Check License key.
+	 */
+	public static function wpssw_check_license_key() {
+		$wpssw_license = self::wpssw_option( 'wpssw_license_key' );
+		$wpssw_status  = self::wpssw_option( 'wpssw_license_status' );
+		if ( false !== $wpssw_status && 'valid' === (string) $wpssw_status && ! empty( $wpssw_license ) ) {
+			return true;
+		} else {
+			return false;
+		}
 	}
 }
 WPSSW_Setting::init();

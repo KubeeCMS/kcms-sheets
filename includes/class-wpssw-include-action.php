@@ -190,5 +190,8 @@ class WPSSW_Include_Action {
 		add_filter( 'plugin_row_meta', 'WPSSW_Setting::wpssw_plugin_row_meta', 10, 2 );
 		add_action( 'plugins_loaded', 'WPSSW_Setting::wpssw_load_textdomain', 10 );
 		add_action( 'wp_ajax_wpssw_reset_settings', 'WPSSW_Setting::wpssw_reset_settings' );
+		add_action( 'admin_notices', 'WPSSW_Setting::wpssw_license_notice' );
+		register_activation_hook( WPSSW_BASE_FILE, 'WPSSW_Setting::wpssw_activation' );
+		register_deactivation_hook( WPSSW_BASE_FILE, 'WPSSW_Setting::wpssw_deactivation' );
 	}
 }

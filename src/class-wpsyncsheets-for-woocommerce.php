@@ -82,8 +82,8 @@ namespace WPSyncSheets_For_WooCommerce {
 			require_once WPSSW_PLUGIN_PATH . '/includes/class-wpssw-include-action.php';
 			require_once WPSSW_PLUGIN_PATH . '/includes/class-wpssw-google-api.php';
 			require_once WPSSW_PLUGIN_PATH . '/includes/class-wpssw-google-api-functions.php';
-			require_once WPSSW_PLUGIN_PATH . '/includes/class-wpssw-license.php';
 			require_once WPSSW_PLUGIN_PATH . '/includes/class-wpssw-plugin-update.php';
+			require_once WPSSW_PLUGIN_PATH . '/includes/class-wpssw-license.php';
 			require_once WPSSW_PLUGIN_PATH . '/includes/class-wpssw-setting.php';
 			$this->wpssw_include_module_files();
 			$this->wpssw_include_import_files();

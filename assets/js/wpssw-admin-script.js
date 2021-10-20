@@ -1215,27 +1215,34 @@
 						type : 'post',
 						data :"action=wpssw_get_product_import_count",
 						success : function( response ) {
-							obj     = JSON.parse( response );
-							var msg = [];
-							if ( "insertproducts" in obj ) {
-								msg.push( 'Insert Product - ' + obj.insertproducts );
-							}
-							if ( "updateproducts" in obj ) {
-								msg.push( 'Update Product - ' + obj.updateproducts );
-							}
-							if ( "deleteproducts" in obj ) {
-								msg.push( 'Delete Product - ' + obj.deleteproducts );
-							}
-							if ( msg.length === 0 ) {
-								alert( 'To perform the import function, make sure you have added 1 to the respective columns of the spreadsheet as per the documentation.' );
+							if ( response == 'notexist') {
+								alert( 'Product ID and Product Variation ID must have 1st and 2nd columns of the spreadsheet.' );
 								$( '#importsyncloader' ).hide();
 								$( '#importsynctext' ).	hide();
 								$( "#importsync" ).show();
 							} else {
-								document.getElementById( "importsyncbtm" ).style.display = "inline-block";
-								document.getElementById( "cancelsyncbtm" ).style.display = "inline-block";
-								$( '#importsyncloader' ).hide();
-								$( '#importsynctext' ).html( '<b>' + msg.join( "<br>" ) + '</b>' );
+								obj     = JSON.parse( response );
+								var msg = [];
+								if ( "insertproducts" in obj ) {
+									msg.push( 'Insert Product - ' + obj.insertproducts );
+								}
+								if ( "updateproducts" in obj ) {
+									msg.push( 'Update Product - ' + obj.updateproducts );
+								}
+								if ( "deleteproducts" in obj ) {
+									msg.push( 'Delete Product - ' + obj.deleteproducts );
+								}
+								if ( msg.length === 0 ) {
+									alert( 'To perform the import function, make sure you have added 1 to the respective columns of the spreadsheet as per the documentation.' );
+									$( '#importsyncloader' ).hide();
+									$( '#importsynctext' ).	hide();
+									$( "#importsync" ).show();
+								} else {
+									document.getElementById( "importsyncbtm" ).style.display = "inline-block";
+									document.getElementById( "cancelsyncbtm" ).style.display = "inline-block";
+									$( '#importsyncloader' ).hide();
+									$( '#importsynctext' ).html( '<b>' + msg.join( "<br>" ) + '</b>' );
+								}
 							}
 						},
 						error: function (s) {
@@ -2450,9 +2457,17 @@
 			if ( activeTab != null) {
 				wpsswTab( event, activeTab );
 				var classNm = "button." + activeTab;
+				if ( $( classNm ).is( ':disabled' )) {
+					var classNm = "button.em-settings";
+					wpsswTab( event, 'em-settings' );
+				}
 				$( classNm ).addClass( 'active' );
 			} else {
 				var classNm = "button.googleapi-settings";
+				if ( $( classNm ).is( ':disabled' )) {
+					var classNm = "button.em-settings";
+					wpsswTab( event, 'em-settings' );
+				}
 				$( classNm ).addClass( 'active' );
 			}
 		}

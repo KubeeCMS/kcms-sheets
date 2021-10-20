@@ -163,8 +163,8 @@ if ( ! class_exists( 'WPSSW_Default_Headers' ) ) :
 			);
 			// Add attributes to headers list.
 
-			$wpssw_attribute_taxonomies = WPSSW_Product::wpssw_get_all_attributes();
-
+			$wpssw_attribute_taxonomies                       = WPSSW_Product::wpssw_get_all_attributes();
+			$wpssw_wooproduct_headers['attribute_taxonomies'] = array();
 			if ( ! empty( $wpssw_attribute_taxonomies ) ) {
 
 					$wpssw_wooproduct_headers['attribute_taxonomies'] = $wpssw_attribute_taxonomies;

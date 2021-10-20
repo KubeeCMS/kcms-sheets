@@ -1891,7 +1891,7 @@ if ( ! class_exists( 'WPSSW_Order' ) ) :
 				}
 				$wpssw_disableclass = 'disabled';
 			} else {
-				$wpssw_orderwise   = "checked='checked'";
+				$wpssw_orderwise    = "checked='checked'";
 				$wpssw_productwise  = '';
 				$wpssw_disableclass = '';
 			}
@@ -3386,20 +3386,6 @@ if ( ! class_exists( 'WPSSW_Order' ) ) :
 				$rangetofind = $wpssw_sheetname . '!A:A';
 			if ( ! empty( $wpssw_values_array ) ) {
 				try {
-					if ( 'descorder' === (string) $order_ascdesc ) {
-						if ( count( $wpssw_data ) > 0 ) {
-							$param                          = array();
-							$startindex                     = 1;
-							$endindex                       = count( $wpssw_values_array ) + 1;
-							$param                          = self::$instance_api->prepare_param( $wpssw_sheetid, $startindex, $endindex );
-							$wpssw_batchupdaterequest       = self::$instance_api->insertdimensionobject( $param );
-							$requestobject                  = array();
-							$requestobject['spreadsheetid'] = $wpssw_spreadsheetid;
-							$requestobject['requestbody']   = $wpssw_batchupdaterequest;
-							$wpssw_response                 = self::$instance_api->formatsheet( $requestobject );
-							$rangetofind                    = $wpssw_sheetname . '!A2';
-						}
-					}
 					$wpssw_params      = array( 'valueInputOption' => $wpssw_inputoption );
 					$wpssw_requestbody = self::$instance_api->valuerangeobject( $wpssw_values_array );
 					$param             = self::$instance_api->setparamater( $wpssw_spreadsheetid, $rangetofind, $wpssw_requestbody, $wpssw_params );

@@ -117,7 +117,13 @@ if ( ! class_exists( 'WPSSW_WP_WooCommerce_Custom_Product_Addon' ) ) :
 						foreach ( $wpssw_metadata as $wpssw_meta ) {
 							if ( strtolower( $wpssw_meta['name'] ) === strtolower( $wpssw_wcpakey ) ) {
 								if ( is_array( $wpssw_meta['value'] ) ) {
-									$wpssw_wcpametaval .= implode( ',', $wpssw_meta['value'] );
+									$data = array();
+									foreach ( $wpssw_meta['value'] as $val ) {
+										if ( isset( $val['value'] ) ) {
+											$data[] = $val['value'];
+										}
+									}
+									$wpssw_wcpametaval .= implode( ',', WPSSW_Setting::wpssw_array_flatten( $data ) );
 								} else {
 									$wpssw_wcpametaval .= trim( $wpssw_meta['value'] ) . ',';
 								}
@@ -127,7 +133,8 @@ if ( ! class_exists( 'WPSSW_WP_WooCommerce_Custom_Product_Addon' ) ) :
 				}
 				$wpssw_wcpametaval = rtrim( $wpssw_wcpametaval, ',' );
 				if ( is_array( $wpssw_wcpametaval ) ) {
-					$wpssw_value[] = implode( ',', $wpssw_wcpametaval );
+					$wpssw_wcpametaval = WPSSW_Setting::wpssw_array_flatten( $wpssw_wcpametaval );
+					$wpssw_value[]     = implode( ',', $wpssw_wcpametaval );
 				} else {
 					$wpssw_value[] = $wpssw_wcpametaval;
 				}
